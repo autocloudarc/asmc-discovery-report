@@ -1,13 +1,35 @@
 <#
 .SYNOPSIS
-Run an Azure Resource Graph kqlScenario2 query to find App Service sites using App Service Managed Certificates (ASMC)
-and that commonly restrict public access (publicNetworkAccess disabled or client certificates enabled).
+Azure Resource Graph query tool to discover App Service Managed Certificates (ASMC) usage patterns 
+across three critical scenarios identified in Microsoft's July 2025 ASMC changes documentation.
 
 .DESCRIPTION
-This script executes the embedded kqlScenario2 via Search-AzGraph, ensuring the required Az modules are
-available, handling authentication (supports device code), optionally setting subscription context,
-collecting Traffic Manager endpoints, and exporting results as CSV, JSON (stdout) or writing objects
-to the pipeline.
+This script executes Azure Resource Graph (KQL) queries to identify App Service sites and certificates 
+that may be impacted by upcoming changes to App Service Managed Certificates (ASMC). It scans across 
+all accessible subscriptions and provides detailed reporting on three key scenarios.
+
+The script handles authentication (supports device code), tests subscription access permissions,
+and exports results as CSV, JSON (stdout) or PowerShell objects to the pipeline.
+
+SCENARIO DESCRIPTIONS:
+
+Scenario 1: Site is not publicly accessible
+- Identifies App Service sites using ASMC that have restricted public access
+- Looks for sites with publicNetworkAccess disabled OR client certificate authentication enabled
+- These sites may be impacted because ASMC renewal requires public accessibility for domain validation
+- Reference: https://learn.microsoft.com/en-us/azure/app-service/app-service-managed-certificate-changes-july-2025#scenario-1-site-is-not-publicly-accessible
+
+Scenario 2: Site is an Azure Traffic Manager 'nested' or 'external' endpoint
+- Discovers Traffic Manager profiles with non-Azure endpoints (external or nested)
+- Non-Azure endpoints cannot use ASMC directly and may require alternative certificate management
+- Helps identify Traffic Manager configurations that might need certificate strategy updates
+- Reference: https://learn.microsoft.com/en-us/azure/app-service/app-service-managed-certificate-changes-july-2025#scenario-2-site-is-an-azure-traffic-manager-nested-or-external-endpoint
+
+Scenario 3: Site relies on *.trafficmanager.net CNAME for custom domain validation
+- Identifies ASMC certificates issued to *.trafficmanager.net domains
+- Finds App Service sites using these certificates for custom domain SSL bindings
+- This configuration may be problematic as Traffic Manager endpoints typically shouldn't use ASMC
+- Reference: https://learn.microsoft.com/en-us/azure/app-service/app-service-managed-certificate-changes-july-2025#scenario-3-site-relies-on-trafficmanager-net-cname-for-custom-domain-validation
 
 .PARAMETER OutputPath
 (Optional) Path to write CSV output. Use '-' to emit JSON to stdout. If omitted, results are written to the pipeline.
@@ -21,10 +43,35 @@ to the pipeline.
 .PARAMETER GrantReaderAccess
 (Optional) Attempt to grant Reader and Resource Graph Reader roles to current user for all subscriptions.
 
+.EXAMPLE
+.\Get-AsmcReport.ps1
+Runs the ASMC discovery report with default settings, outputs to asmc-report.csv
+
+.EXAMPLE
+.\Get-AsmcReport.ps1 -OutputPath "-"
+Runs the report and outputs results as JSON to stdout
+
+.EXAMPLE
+.\Get-AsmcReport.ps1 -UseDeviceLogin
+Runs the report using device code authentication (useful for MFA scenarios)
+
+.EXAMPLE
+.\Get-AsmcReport.ps1 -GrantReaderAccess
+First attempts to grant Reader permissions to all subscriptions, then runs the report
+
 .NOTES
 Contributors: 
 Preston K. Parsard
 GitHub Copilot
+
+Requirements:
+- Az.Accounts PowerShell module
+- Az.ResourceGraph PowerShell module  
+- Az.TrafficManager PowerShell module
+- Reader role or Resource Graph Reader role on target subscriptions
+- Azure Resource Graph access permissions
+
+Last Updated: September 2025
 #>
 
 [CmdletBinding()]
